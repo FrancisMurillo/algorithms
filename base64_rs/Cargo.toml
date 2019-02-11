@@ -1,0 +1,12 @@
+[package]
+name = "base64_rs"
+version = "0.1.0"
+authors = ["Francis Murillo <francismurillo@digix.global>"]
+
+[dependencies]
+lazy_static = "1.2.0"
+
+[dev-dependencies]
+quickcheck = "0.8"
+quickcheck_macros = "0.8"
+base64 = "0.10.1"
