@@ -80,6 +80,30 @@ pub struct Options {
 }
 
 pub fn decode(encoded_text: &String) -> Option<Vec<u8>> {
-    // for encoded_byteencoded_text.as_bytes()
-    None
+    let mut plain_bytes: Vec<u8> = Vec::with_capacity(encoded_text.len());
+    let mut byte_index: u8 = 0;
+    let mut previous_byte: u8 = 0;
+
+    for encoded_byte in encoded_text.as_bytes() {
+        let plain_result = DECODING_MAP.get(&encoded_byte);
+
+        if plain_result == None {
+            return None;
+        }
+
+        let Some(&current_byte) = plain_result;
+
+        match byte_index {
+            0 => {}
+            1 => ((previous_byte & 0b00111111) << 2) + (current_byte & 0b00),
+            2 => {}
+            3 => {}
+            _ => panic!("Invalid byte index"),
+        }
+
+        byte_index = if byte_index == 3 { 0 } else { byte_index + 1 };
+        previous_byte = current_byte;
+    }
+
+    Some(plain_bytes)
 }
