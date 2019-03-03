@@ -1,10 +1,10 @@
 use std::cmp::{Ord, Ordering};
 
-pub fn sort<T: Ord + Clone>(mut xs: Vec<T>) -> Vec<T> {
+pub fn selection_sort<T: Ord>(mut xs: Vec<T>) -> Vec<T> {
     let sorting = Ordering::Greater;
 
     if xs.is_empty() {
-        xs.to_owned()
+        xs
     } else {
         for i in 0..(xs.len() - 1) {
             let mut smallest = i;
@@ -20,19 +20,19 @@ pub fn sort<T: Ord + Clone>(mut xs: Vec<T>) -> Vec<T> {
             }
         }
 
-        xs.to_owned()
+        xs
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::sort;
+    use super::selection_sort;
 
     #[quickcheck]
-    fn should_work(xs: Vec<isize>) -> bool {
+    fn selection_sort_should_work(xs: Vec<isize>) -> bool {
         let mut ys = xs.clone();
         ys.sort();
 
-        sort(xs) == ys
+        selection_sort(xs) == ys
     }
 }
