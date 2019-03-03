@@ -1,10 +1,10 @@
 use std::cmp::{Ord, Ordering};
 
-pub fn sort<T: Ord>(xs: &mut [T]) -> &[T] {
+pub fn sort<T: Ord + Clone>(mut xs: Vec<T>) -> Vec<T> {
     let sorting = Ordering::Greater;
 
-    if xs == [] {
-        xs
+    if xs.is_empty() {
+        xs.to_owned()
     } else {
         for i in 0..(xs.len() - 1) {
             let mut smallest = i;
@@ -20,7 +20,7 @@ pub fn sort<T: Ord>(xs: &mut [T]) -> &[T] {
             }
         }
 
-        xs
+        xs.to_owned()
     }
 }
 
@@ -28,14 +28,11 @@ pub fn sort<T: Ord>(xs: &mut [T]) -> &[T] {
 mod tests {
     use super::sort;
 
-    #[test]
-    fn samples_should_work() {
-        assert_eq!([1, 2, 3, 4], sort(&mut [2, 1, 4, 3]));
-    }
-
     #[quickcheck]
-    fn should_work(xs: Vec<u32>) {
-        xs.clone
-        sort(xs) == xs.clone
+    fn should_work(xs: Vec<isize>) -> bool {
+        let mut ys = xs.clone();
+        ys.sort();
+
+        sort(xs) == ys
     }
 }
