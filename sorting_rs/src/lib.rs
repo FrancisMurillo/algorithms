@@ -4,4 +4,4 @@ extern crate quickcheck;
 #[macro_use(quickcheck)]
 extern crate quickcheck_macros;
 
-mod selection_sort;
+mod basic_sorting;

@@ -79,31 +79,52 @@ pub struct Options {
     unpadded: bool,
 }
 
-pub fn decode(encoded_text: &String) -> Option<Vec<u8>> {
+const DEFAULT_OPTIONS: Options = Options { unpadded: false };
+
+pub fn decode(encoded_text: &String, options: Options) -> Option<Vec<u8>> {
     let mut plain_bytes: Vec<u8> = Vec::with_capacity(encoded_text.len());
     let mut byte_index: u8 = 0;
     let mut previous_byte: u8 = 0;
 
     for encoded_byte in encoded_text.as_bytes() {
+        if *encoded_byte == PADDING_BYTE {
+            return Some(plain_bytes);
+        }
+
         let plain_result = DECODING_MAP.get(&encoded_byte);
 
-        if plain_result == None {
+        if let Some(&current_byte) = plain_result {
+            let next_result = match byte_index {
+                1 => Some(((previous_byte & 0b00111111) << 2) + ((current_byte & 0b00110000) >> 4)),
+                2 => Some(((previous_byte & 0b00001111) << 4) + ((current_byte & 0b00111100) >> 2)),
+                3 => Some(((previous_byte & 0b00110000) << 2) + (current_byte & 0b00111111)),
+                _ => None,
+            };
+
+            if let Some(next_byte) = next_result {
+                plain_bytes.push(next_byte);
+            } else {
+            }
+
+            byte_index = if byte_index == 3 { 0 } else { byte_index + 1 };
+            previous_byte = current_byte;
+        } else {
             return None;
         }
-
-        let Some(&current_byte) = plain_result;
-
-        match byte_index {
-            0 => {}
-            1 => ((previous_byte & 0b00111111) << 2) + (current_byte & 0b00),
-            2 => {}
-            3 => {}
-            _ => panic!("Invalid byte index"),
-        }
-
-        byte_index = if byte_index == 3 { 0 } else { byte_index + 1 };
-        previous_byte = current_byte;
     }
 
     Some(plain_bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn static_decode_examples_should_work() {
+        assert_eq!(
+            Some("Man".as_bytes()),
+            decode(&String::from("TWFu"), DEFAULT_OPTIONS)
+        );
+    }
 }
