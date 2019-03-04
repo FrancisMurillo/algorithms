@@ -4,46 +4,40 @@ pub fn selection_sort<T: Ord>(mut xs: Vec<T>) -> Vec<T> {
     let sorting = Ordering::Greater;
 
     if xs.is_empty() {
-        xs
-    } else {
-        for i in 0..(xs.len() - 1) {
-            let mut smallest = i;
+        return xs
+    }
 
-            for j in (i + 1)..(xs.len()) {
-                if xs[smallest].cmp(&xs[j]) == sorting {
-                    smallest = j;
-                }
-            }
+    for i in 0..(xs.len() - 1) {
+        let mut smallest = i;
 
-            if i != smallest {
-                xs.swap(i, smallest);
+        for j in (i + 1)..(xs.len()) {
+            if xs[smallest].cmp(&xs[j]) == sorting {
+                smallest = j;
             }
         }
 
-        xs
+        if i != smallest {
+            xs.swap(i, smallest);
+        }
     }
+
+    xs
 }
 
 pub fn insertion_sort<T: Ord>(mut xs: Vec<T>) -> Vec<T> {
     let sorting = Ordering::Greater;
 
-    if xs.is_empty() || xs.len() == 1 {
-        xs
-    } else {
-        for i in 0..(xs.len() - 2) {
-            println!("MEOW");
-            for j in (i + 1)..1 {
-                println!("{:?}", xs[j].cmp(&xs[j - 1]));
-                if xs[j].cmp(&xs[j - 1]) == sorting {
-                    xs.swap(j, j - 1);
-                } else {
-                    break;
-                }
+    for i in 1..xs.len() {
+        for j in (1..(i + 1)).rev() {
+            if xs[j].cmp(&xs[j - 1]) == sorting {
+                break;
+            } else {
+                xs.swap(j, j - 1);
             }
         }
-
-        xs
     }
+
+    xs
 }
 
 #[cfg(test)]
