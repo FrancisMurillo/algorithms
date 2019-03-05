@@ -81,7 +81,7 @@ pub struct Options {
 
 const DEFAULT_OPTIONS: Options = Options { unpadded: false };
 
-pub fn decode(encoded_text: &String, options: Options) -> Option<Vec<u8>> {
+pub fn decode(encoded_text: String, options: Options) -> Option<Vec<u8>> {
     let mut plain_bytes: Vec<u8> = Vec::with_capacity(encoded_text.len());
     let mut byte_index: u8 = 0;
     let mut previous_byte: u8 = 0;
@@ -97,7 +97,7 @@ pub fn decode(encoded_text: &String, options: Options) -> Option<Vec<u8>> {
             let next_result = match byte_index {
                 1 => Some(((previous_byte & 0b00111111) << 2) + ((current_byte & 0b00110000) >> 4)),
                 2 => Some(((previous_byte & 0b00001111) << 4) + ((current_byte & 0b00111100) >> 2)),
-                3 => Some(((previous_byte & 0b00110000) << 2) + (current_byte & 0b00111111)),
+                3 => Some(((previous_byte & 0b00000011) << 6) + (current_byte & 0b00111111)),
                 _ => None,
             };
 
@@ -118,13 +118,49 @@ pub fn decode(encoded_text: &String, options: Options) -> Option<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{decode as core_decode, DEFAULT_OPTIONS, Options};
+
+    use base64::{decode, decode_config, encode, encode_config, STANDARD_NO_PAD};
 
     #[test]
     fn static_decode_examples_should_work() {
         assert_eq!(
-            Some("Man".as_bytes()),
-            decode(&String::from("TWFu"), DEFAULT_OPTIONS)
+            Some(string_to_bytes(String::from("Man"))),
+            core_decode(String::from("TWFu"), DEFAULT_OPTIONS)
         );
+        assert_eq!(
+            Some(string_to_bytes(String::from("Ma"))),
+            core_decode(String::from("TWE="), DEFAULT_OPTIONS)
+        );
+        assert_eq!(
+            Some(string_to_bytes(String::from("M"))),
+            core_decode(String::from("TQ=="), DEFAULT_OPTIONS)
+        );
+    }
+
+    #[quickcheck]
+    fn decode_should_work(text: String) -> bool {
+        let encoded_text = encode(&text);
+
+        decode(&encoded_text).ok() == core_decode(encoded_text, DEFAULT_OPTIONS)
+    }
+
+    #[quickcheck]
+    fn decode_should_work_without_padding(text: String) -> bool {
+        let encoded_text = encode_config(&text, STANDARD_NO_PAD);
+
+        decode(&encoded_text).ok() == core_decode(encoded_text, Options { unpadded: true})
+    }
+
+
+
+    fn string_to_bytes(text : String) -> Vec<u8> {
+        let mut vector = Vec::new();
+
+        for v in text.as_bytes().iter() {
+            vector.push(*v);
+        }
+
+        vector
     }
 }

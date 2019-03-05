@@ -40,9 +40,32 @@ pub fn insertion_sort<T: Ord>(mut xs: Vec<T>) -> Vec<T> {
     xs
 }
 
+pub fn counting_sort(mut xs: Vec<usize>) -> Vec<usize> {
+    let max_value = *xs.iter().max().unwrap_or(&0);
+    println!("{:?}", max_value);
+
+    let mut count : Vec<usize> = Vec::with_capacity(max_value);
+    let mut output : Vec<usize> =  Vec::with_capacity(xs.len());
+
+    for i in 0..xs.len() {
+        count[xs[i]] += 1;
+    }
+
+    for i in 1..xs.len() {
+        count[i] += count[i - 1];
+    }
+
+    for i in (0..xs.len()).rev() {
+        output[count[xs[i]]] = xs[i];
+        count[xs[i]] -= 1;
+    }
+
+    output
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{insertion_sort, selection_sort};
+    use super::{counting_sort, insertion_sort, selection_sort};
 
     #[quickcheck]
     fn selection_sort_should_work(xs: Vec<isize>) -> bool {
@@ -60,4 +83,11 @@ mod tests {
         insertion_sort(xs) == ys
     }
 
+    #[quickcheck]
+    fn counting_sort_should_work(xs: Vec<usize>) -> bool {
+        let mut ys = xs.clone();
+        ys.sort();
+
+        counting_sort(xs) == ys
+    }
 }
