@@ -1,0 +1,17 @@
+[package]
+name = "base58_rs"
+version = "0.1.0"
+authors = ["Francis Murillo <francisavmurillo@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+num = "0.2"
+num-integer = "0.1"
+num-bigint = "0.2"
+num-traits = "0.2"
+
+
+[dev-dependencies]
+quickcheck = "0.8"
+quickcheck_macros = "0.8"
+rust-base58 = "*"
