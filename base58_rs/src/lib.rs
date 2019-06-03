@@ -38,9 +38,10 @@ pub fn encode(plain_text: &String) -> String {
         value = value.div_floor(&divisor);
     }
 
-    let characters: Vec<String> = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-        .split("")
-        .map(|char| char.to_string())
+    coefficients_58.reverse();
+
+    let characters: Vec<char> = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+        .chars()
         .collect();
 
     coefficients_58
@@ -51,6 +52,42 @@ pub fn encode(plain_text: &String) -> String {
         .join("")
 }
 
+pub fn decode(encoded_text: &String) -> Option<String> {
+    let mut characters: Vec<u8> = ("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+        .as_bytes())
+    .into_iter()
+    .map(|v| v.clone())
+    .collect();
+
+    let value_58_result =
+        (*encoded_text.as_bytes())
+            .into_iter()
+            .try_fold(Zero::zero(), |acc: BigUint, ch| {
+                characters
+                    .iter()
+                    .position(|v| v == ch)
+                    .map(|value| acc * (58 as usize) + value)
+            });
+
+    value_58_result.and_then(|value_58| {
+        let mut coefficients_256 = vec![];
+        let mut value = value_58.clone();
+
+        let divisor = BigUint::from(256 as usize);
+
+        while !value.is_zero() {
+            let remainder = &value % (256 as usize);
+            coefficients_256.push(remainder.to_u8().unwrap());
+
+            value = value.div_floor(&divisor);
+        }
+
+        coefficients_256.reverse();
+
+        String::from_utf8(coefficients_256).ok()
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -59,7 +96,23 @@ mod tests {
 
     #[quickcheck]
     fn encode_should_work(text: String) -> bool {
-        println!("{}", encode(&"Cat".to_string()));
         encode(&text) == *(&text.as_bytes()).to_base58()
     }
+
+    #[quickcheck]
+    fn encode_decode_should_work(text: String) -> bool {
+        let encoded_text = (&text.as_bytes()).to_base58();
+        let same_text = (&encoded_text.as_bytes())
+            .from_base58()
+            .ok()
+            .and_then(|value| String::from_utf8(value).ok());
+
+        dbg!(&text);
+        dbg!(&encoded_text);
+        dbg!(&same_text);
+        dbg!(&encode(&text));
+        dbg!(decode(&encode(&text)));
+        decode(&encode(&text)) == same_text
+    }
+
 }
