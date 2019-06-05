@@ -18,6 +18,12 @@ use num_integer::Integer;
 use num_traits::{ToPrimitive, Zero};
 
 pub fn encode(plain_text: &String) -> String {
+    if plain_text == "" {
+        return plain_text.to_owned();
+    }
+
+    let characters: Vec<u8> = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz".into();
+
     let value_256 =
         (*plain_text.as_bytes())
             .into_iter()
@@ -26,6 +32,10 @@ pub fn encode(plain_text: &String) -> String {
 
                 acc * (256 as usize) + value
             });
+
+    if value_256.is_zero() {
+        return String::from_utf8_lossy(&characters[0..1]).into_owned();
+    }
 
     let mut coefficients_58 = vec![];
     let mut value = value_256.clone();
@@ -40,24 +50,22 @@ pub fn encode(plain_text: &String) -> String {
 
     coefficients_58.reverse();
 
-    let characters: Vec<char> = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-        .chars()
-        .collect();
-
-    coefficients_58
-        .iter()
-        .map(|value| value.to_usize().unwrap())
-        .map(|coefficient| characters.get(coefficient).unwrap().to_string())
-        .collect::<Vec<String>>()
-        .join("")
+    String::from_utf8_lossy(
+        &coefficients_58
+            .iter()
+            .map(|value| value.to_usize().unwrap())
+            .map(|coefficient| characters.get(coefficient).unwrap().clone())
+            .collect::<Vec<u8>>(),
+    )
+    .into_owned()
 }
 
 pub fn decode(encoded_text: &String) -> Option<String> {
-    let mut characters: Vec<u8> = ("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-        .as_bytes())
-    .into_iter()
-    .map(|v| v.clone())
-    .collect();
+    if encoded_text == "" {
+        return Some("".to_string());
+    }
+
+    let characters: Vec<u8> = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz".into();
 
     let value_58_result =
         (*encoded_text.as_bytes())
@@ -70,6 +78,10 @@ pub fn decode(encoded_text: &String) -> Option<String> {
             });
 
     value_58_result.and_then(|value_58| {
+        if value_58.is_zero() {
+            return Some("\u{0}".to_string());
+        }
+
         let mut coefficients_256 = vec![];
         let mut value = value_58.clone();
 
@@ -101,18 +113,13 @@ mod tests {
 
     #[quickcheck]
     fn encode_decode_should_work(text: String) -> bool {
+        // NOTE: This does not work with null terminated strings "\x00+ "
         let encoded_text = (&text.as_bytes()).to_base58();
         let same_text = (&encoded_text.as_bytes())
             .from_base58()
             .ok()
             .and_then(|value| String::from_utf8(value).ok());
 
-        dbg!(&text);
-        dbg!(&encoded_text);
-        dbg!(&same_text);
-        dbg!(&encode(&text));
-        dbg!(decode(&encode(&text)));
         decode(&encode(&text)) == same_text
     }
-
 }
