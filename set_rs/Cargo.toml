@@ -1,0 +1,8 @@
+[package]
+name = "set_rs"
+version = "0.1.0"
+authors = ["Francis Murillo <francisavmurillo@gmail.com>"]
+edition = "2018"
+
+[dev-dependencies]
+rand = "0.6"
