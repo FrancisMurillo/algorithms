@@ -1,40 +1,43 @@
-use std::collections::HashMap;
-use std::hash::{BuildHasher, Hash, Hasher};
+use std::collections::hash_map::DefaultHasher;
+use std::convert::TryInto;
+use std::hash::{Hash, Hasher};
 
-pub struct HashSet<V: Eq + Hash>(HashMap<u64, V>);
+pub struct HashSet<V: Eq + Hash> {
+    data: Vec<(usize, Box<V>)>,
+}
 
 impl<V: Eq + Hash> HashSet<V> {
     pub fn new() -> Self {
-        Self(HashMap::default())
+        Self { data: vec![] }
     }
 
     pub fn insert(&mut self, value: V) -> bool {
-        let mut hasher = self.0.hasher().build_hasher();
+        let mut hasher = DefaultHasher::new();
         value.hash(&mut hasher);
 
-        let key = hasher.finish();
+        let key: usize = hasher.finish().try_into().expect("Should convert");
 
-        match self.0.get(&key) {
+        match self.data.iter().find(|&item| item.0 == key) {
             Some(_) => false,
             None => {
-                self.0.insert(key, value);
+                self.data.push((key, Box::new(value)));
                 true
             }
         }
     }
 
     pub fn len(&self) -> usize {
-        self.0.len()
+        self.data.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        self.data.is_empty()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use rand::prelude::*;
+    use rand::random;
 
     use super::HashSet;
 
