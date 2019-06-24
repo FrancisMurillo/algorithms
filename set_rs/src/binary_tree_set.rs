@@ -10,53 +10,52 @@ struct BinaryNode<T> {
 }
 
 #[derive(Debug)]
-pub struct OrderedSet<T: Ord> {
+pub struct BinaryTreeSet<T: Ord> {
     root: BinaryTree<T>,
 }
 
-impl<T: Ord> Default for OrderedSet<T> {
+impl<T: Ord> Default for BinaryTreeSet<T> {
     fn default() -> Self {
         Self { root: None }
     }
 }
 
 #[derive(Debug)]
-pub struct OrderedSetIter<'a, T: Ord> {
+pub struct BinaryTreeSetIter<'a, T: Ord> {
     prev_nodes: Vec<&'a BinaryNode<T>>,
     current_tree: &'a BinaryTree<T>,
 }
 
-impl<T: Ord> OrderedSet<T> {
+impl<T: Ord> BinaryTreeSet<T> {
     pub fn insert(&mut self, value: T) {
-        fn insert_node<T: Ord>(node: &mut BinaryTree<T>, value: T) {
-            match node {
-                None => {
-                    *node = Some(Box::new(BinaryNode {
-                        value: value,
-                        left: None,
-                        right: None,
-                    }));
+        let mut current_tree = &mut self.root;
+
+        while let Some(ref mut current_node) = current_tree {
+            match current_node.value.cmp(&value) {
+                Ordering::Less => current_tree = &mut current_node.right,
+                Ordering::Equal => {
+                    return;
                 }
-                Some(ref mut current_node) => match current_node.value.cmp(&value) {
-                    Ordering::Less => insert_node(&mut current_node.right, value),
-                    Ordering::Equal => {}
-                    Ordering::Greater => insert_node(&mut current_node.left, value),
-                },
+                Ordering::Greater => current_tree = &mut current_node.left,
             }
         }
 
-        insert_node(&mut self.root, value)
+        *current_tree = Some(Box::new(BinaryNode {
+            value: value,
+            left: None,
+            right: None,
+        }));
     }
 
-    pub fn iter(&self) -> OrderedSetIter<T> {
-        OrderedSetIter {
+    pub fn iter(&self) -> BinaryTreeSetIter<T> {
+        BinaryTreeSetIter {
             prev_nodes: Vec::default(),
             current_tree: &self.root,
         }
     }
 }
 
-impl<'a, T: Ord> Iterator for OrderedSetIter<'a, T> {
+impl<'a, T: Ord> Iterator for BinaryTreeSetIter<'a, T> {
     type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -110,7 +109,7 @@ mod tests {
 
     #[test]
     fn should_work() {
-        let mut set = OrderedSet::<u8>::default();
+        let mut set = BinaryTreeSet::<u8>::default();
         let mut ordered_set = BTreeSet::<u8>::default();
 
         for _ in 1..100 {
