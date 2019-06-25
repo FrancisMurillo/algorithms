@@ -21,57 +21,64 @@ impl<'a, T: 'a + Ord> Default for AvlTreeSet<T> {
     }
 }
 
-impl<'a, T: 'a + Ord> AvlTreeSet<T> {
-    pub fn insert(&mut self, value: T) {
-        if let None = self.root {
-            self.root = Some(Box::new(AvlNode {
-                value: value,
-                left: None,
-                right: None,
-                height: 0,
-            }));
-
+impl<'a, T: 'a + Ord> AvlNode<T> {
+    pub fn rotate_right(&mut self) {
+        if self.right.is_none() || self.left.is_none() {
             return;
         }
 
-        let mut nodes: Vec<&mut AvlTree<T>> = vec![&mut self.root];
+        let mut left_node = self.left.as_mut().unwrap();
+    }
 
-        while let Some(current_node) = nodes.last().unwrap() {
+    pub fn rotate_left(&mut self) {
+        if self.right.is_none() || self.left.is_none() {
+            return;
+        }
+    }
+}
+
+impl<'a, T: 'a + Ord> AvlTreeSet<T> {
+    pub fn insert(&mut self, value: T) {
+        let mut prev_nodes: Vec<*mut AvlNode<T>> = Vec::default();
+
+        let mut current_tree = &mut self.root;
+
+        while let Some(current_node) = current_tree {
+            prev_nodes.push(&mut **current_node);
+
             match current_node.value.cmp(&value) {
-                Ordering::Less => {
-                    nodes.push(&mut current_node.right);
-                }
+                Ordering::Less => current_tree = &mut current_node.right,
                 Ordering::Equal => {
                     return;
                 }
-                Ordering::Greater => {
-                    nodes.push(&mut current_node.left);
-                }
+                Ordering::Greater => current_tree = &mut current_node.left,
             }
         }
 
-        *nodes.pop().unwrap() = Some(Box::new(AvlNode {
+        *current_tree = Some(Box::new(AvlNode {
             value: value,
             left: None,
             right: None,
-            height: 0,
+            height: 1,
         }));
 
-        while let Some(current_tree) = nodes.pop() {
-            let mut current_parent = current_tree.as_mut().unwrap();
-
-            current_parent.height = max(
-                current_parent
-                    .left
-                    .map(|ref left| left.height + 1)
-                    .or(Some(0))
-                    .unwrap(),
-                current_parent
-                    .right
-                    .map(|ref right| right.height + 1)
-                    .or(Some(0))
-                    .unwrap(),
-            );
+        for node in prev_nodes {
+            unsafe {
+                (*node).height = max(
+                    (*node)
+                        .left
+                        .as_ref()
+                        .map(|ref left| left.height + 1)
+                        .or(Some(0))
+                        .unwrap(),
+                    (*node)
+                        .right
+                        .as_ref()
+                        .map(|ref right| right.height + 1)
+                        .or(Some(0))
+                        .unwrap(),
+                );
+            }
         }
     }
 
@@ -100,16 +107,16 @@ impl<'a, T: 'a + Ord> Iterator for AvlTreeSetIter<'a, T> {
                         return None;
                     }
 
-                    Some(prev_node) => {
-                        let value = prev_node.value;
+                    Some(ref prev_node) => {
+                        let value = &prev_node.value;
 
                         self.current_tree = &prev_node.right;
 
-                        return Some(&value);
+                        return Some(value);
                     }
                 },
 
-                Some(current_node) => {
+                Some(ref current_node) => {
                     if let Some(_) = current_node.left {
                         self.prev_nodes.push(&current_node);
                         self.current_tree = &current_node.left;
@@ -117,7 +124,7 @@ impl<'a, T: 'a + Ord> Iterator for AvlTreeSetIter<'a, T> {
                         continue;
                     }
 
-                    let value = current_node.value;
+                    let value = &current_node.value;
 
                     if let Some(_) = current_node.right {
                         self.current_tree = &current_node.right;
@@ -127,7 +134,7 @@ impl<'a, T: 'a + Ord> Iterator for AvlTreeSetIter<'a, T> {
 
                     self.current_tree = &None;
 
-                    return Some(&value);
+                    return Some(value);
                 }
             }
         }
@@ -152,6 +159,8 @@ mod tests {
             set.insert(value.clone());
             ordered_set.insert(value.clone());
         }
+
+        dbg!(&set);
 
         for pair in set.iter().zip(ordered_set.iter()) {
             let (left, right) = pair;
