@@ -216,6 +216,7 @@ impl<'a, T: 'a + Ord> Iterator for AvlTreeSetIter<'a, T> {
 mod tests {
     use rand::random;
     use std::collections::BTreeSet;
+    use test::{black_box, Bencher};
 
     use super::*;
 
@@ -340,6 +341,17 @@ mod tests {
 
             assert_eq!(left, right);
         }
+    }
+
+    #[bench]
+    fn bench_insert(b: &mut Bencher) {
+        let mut set = AvlTreeSet::<usize>::default();
+
+        b.iter(|| {
+            for value in 1..10000 {
+                set.insert(value);
+            }
+        });
     }
 
     #[test]
