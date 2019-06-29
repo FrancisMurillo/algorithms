@@ -12,17 +12,26 @@ struct AvlNode<T> {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct AvlTreeSet<T: Ord> {
+pub struct AvlTreeSet<T>
+where
+    T: Ord,
+{
     root: AvlTree<T>,
 }
 
-impl<'a, T: 'a + Ord> Default for AvlTreeSet<T> {
+impl<'a, T: 'a> Default for AvlTreeSet<T>
+where
+    T: Ord,
+{
     fn default() -> Self {
         Self { root: None }
     }
 }
 
-impl<'a, T: 'a + Ord> AvlNode<T> {
+impl<'a, T: 'a> AvlNode<T>
+where
+    T: Ord,
+{
     fn left_height(&self) -> usize {
         self.left
             .as_ref()
@@ -86,7 +95,10 @@ impl<'a, T: 'a + Ord> AvlNode<T> {
     }
 }
 
-impl<'a, T: 'a + Ord> AvlTreeSet<T> {
+impl<'a, T: 'a> AvlTreeSet<T>
+where
+    T: Ord,
+{
     pub fn insert(&mut self, value: T) {
         let mut prev_nodes = Vec::<*mut AvlNode<T>>::default();
 
@@ -162,7 +174,10 @@ impl<'a, T: 'a + Ord> AvlTreeSet<T> {
 }
 
 #[derive(Debug)]
-pub struct AvlTreeSetIter<'a, T: 'a + Ord> {
+pub struct AvlTreeSetIter<'a, T: 'a>
+where
+    T: Ord,
+{
     prev_nodes: Vec<&'a AvlNode<T>>,
     current_tree: &'a AvlTree<T>,
 }
@@ -216,7 +231,7 @@ impl<'a, T: 'a + Ord> Iterator for AvlTreeSetIter<'a, T> {
 mod tests {
     use rand::random;
     use std::collections::BTreeSet;
-    use test::{black_box, Bencher};
+    use test::Bencher;
 
     use super::*;
 
