@@ -1,118 +1,31 @@
-use std::cmp::{max, Ordering};
-use std::mem::replace;
-
-type AvlTree<T> = Option<Box<AvlNode<T>>>;
+use super::tree::{AvlNode, AvlTree};
+use std::cmp::Ordering::{Equal, Greater, Less};
 
 #[derive(Debug, PartialEq)]
-struct AvlNode<T> {
-    value: T,
-    left: AvlTree<T>,
-    right: AvlTree<T>,
-    height: usize,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct AvlTreeSet<T>
-where
-    T: Ord,
-{
+pub struct AvlTreeSet<T: Ord> {
     root: AvlTree<T>,
 }
 
-impl<'a, T: 'a> Default for AvlTreeSet<T>
-where
-    T: Ord,
-{
+impl<'a, T: 'a + Ord> Default for AvlTreeSet<T> {
     fn default() -> Self {
         Self { root: None }
     }
 }
 
-impl<'a, T: 'a> AvlNode<T>
-where
-    T: Ord,
-{
-    fn left_height(&self) -> usize {
-        self.left
-            .as_ref()
-            .map(|left| left.height)
-            .or(Some(0))
-            .unwrap()
-    }
-
-    fn right_height(&self) -> usize {
-        self.right
-            .as_ref()
-            .map(|right| right.height)
-            .or(Some(0))
-            .unwrap()
-    }
-
-    pub fn update_height(&mut self) {
-        self.height = 1 + max(self.left_height(), self.right_height());
-    }
-
-    pub fn balance_factor(&mut self) -> i8 {
-        let left_height = self.left_height();
-        let right_height = self.right_height();
-
-        if left_height >= right_height {
-            (left_height - right_height) as i8
-        } else {
-            -((right_height - left_height) as i8)
-        }
-    }
-
-    pub fn rotate_left(&mut self) {
-        let right_left_tree = self
-            .right
-            .as_mut()
-            .expect("Right tree required")
-            .left
-            .take();
-        let new_root = *replace(&mut self.right, right_left_tree).unwrap();
-        let old_root = replace(self, new_root);
-
-        replace(&mut self.left, Some(Box::new(old_root)));
-
-        self.left.as_mut().map(|node| node.update_height());
-        self.right.as_mut().map(|node| node.update_height());
-
-        self.update_height();
-    }
-
-    pub fn rotate_right(&mut self) {
-        let left_right_tree = self.left.as_mut().expect("Left tree required").right.take();
-        let new_root = *replace(&mut self.left, left_right_tree).unwrap();
-        let old_root = replace(self, new_root);
-
-        replace(&mut self.right, Some(Box::new(old_root)));
-
-        self.left.as_mut().map(|node| node.update_height());
-        self.right.as_mut().map(|node| node.update_height());
-
-        self.update_height();
-    }
-}
-
-impl<'a, T: 'a> AvlTreeSet<T>
-where
-    T: Ord,
-{
+impl<'a, T: 'a + Ord> AvlTreeSet<T> {
     pub fn insert(&mut self, value: T) {
         let mut prev_nodes = Vec::<*mut AvlNode<T>>::default();
-
         let mut current_tree = &mut self.root;
 
         while let Some(current_node) = current_tree {
             prev_nodes.push(&mut **current_node);
 
             match current_node.value.cmp(&value) {
-                Ordering::Less => current_tree = &mut current_node.right,
-                Ordering::Equal => {
+                Less => current_tree = &mut current_node.right,
+                Equal => {
                     return;
                 }
-                Ordering::Greater => current_tree = &mut current_node.left,
+                Greater => current_tree = &mut current_node.left,
             }
         }
 
@@ -174,10 +87,7 @@ where
 }
 
 #[derive(Debug)]
-pub struct AvlTreeSetIter<'a, T: 'a>
-where
-    T: Ord,
-{
+pub struct AvlTreeSetIter<'a, T: 'a + Ord> {
     prev_nodes: Vec<&'a AvlNode<T>>,
     current_tree: &'a AvlTree<T>,
 }
@@ -230,6 +140,7 @@ impl<'a, T: 'a + Ord> Iterator for AvlTreeSetIter<'a, T> {
 #[cfg(test)]
 mod tests {
     use rand::random;
+    use std::cmp::max;
     use std::collections::BTreeSet;
     use test::Bencher;
 
