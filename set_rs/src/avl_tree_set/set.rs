@@ -1,5 +1,7 @@
 use super::tree::{AvlNode, AvlTree};
+use core::iter::Map;
 use std::cmp::Ordering::{Equal, Greater, Less};
+use std::iter::FromIterator;
 
 #[derive(Debug, PartialEq)]
 pub struct AvlTreeSet<T: Ord> {
@@ -13,7 +15,7 @@ impl<'a, T: 'a + Ord> Default for AvlTreeSet<T> {
 }
 
 impl<'a, T: 'a + Ord> AvlTreeSet<T> {
-    pub fn insert(&mut self, value: T) {
+    pub fn insert(&mut self, value: T) -> bool {
         let mut prev_nodes = Vec::<*mut AvlNode<T>>::default();
         let mut current_tree = &mut self.root;
 
@@ -23,14 +25,14 @@ impl<'a, T: 'a + Ord> AvlTreeSet<T> {
             match current_node.value.cmp(&value) {
                 Less => current_tree = &mut current_node.right,
                 Equal => {
-                    return;
+                    return false;
                 }
                 Greater => current_tree = &mut current_node.left,
             }
         }
 
         *current_tree = Some(Box::new(AvlNode {
-            value: value,
+            value,
             left: None,
             right: None,
             height: 1,
@@ -76,24 +78,43 @@ impl<'a, T: 'a + Ord> AvlTreeSet<T> {
                 _ => {}
             }
         }
+
+        true
     }
 
-    pub fn iter(&self) -> AvlTreeSetIter<T> {
-        AvlTreeSetIter {
+    #[deny(clippy::all)]
+    pub fn iter(&self) -> Map<AvlTreeSetNodeIter<'_, T>, fn(&'_ AvlNode<T>) -> &'_ T> {
+        self.node_iter().map(|node| &node.value)
+    }
+
+    fn node_iter(&self) -> AvlTreeSetNodeIter<'_, T> {
+        AvlTreeSetNodeIter {
             prev_nodes: Vec::default(),
             current_tree: &self.root,
         }
     }
 }
 
+impl<T: Ord> FromIterator<T> for AvlTreeSet<T> {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+        let mut set = Self::default();
+
+        for i in iter {
+            set.insert(i);
+        }
+
+        set
+    }
+}
+
 #[derive(Debug)]
-pub struct AvlTreeSetIter<'a, T: 'a + Ord> {
+pub struct AvlTreeSetNodeIter<'a, T: 'a + Ord> {
     prev_nodes: Vec<&'a AvlNode<T>>,
     current_tree: &'a AvlTree<T>,
 }
 
-impl<'a, T: 'a + Ord> Iterator for AvlTreeSetIter<'a, T> {
-    type Item = &'a T;
+impl<'a, T: 'a + Ord> Iterator for AvlTreeSetNodeIter<'a, T> {
+    type Item = &'a AvlNode<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -104,33 +125,29 @@ impl<'a, T: 'a + Ord> Iterator for AvlTreeSetIter<'a, T> {
                     }
 
                     Some(ref prev_node) => {
-                        let value = &prev_node.value;
-
                         self.current_tree = &prev_node.right;
 
-                        return Some(value);
+                        return Some(prev_node);
                     }
                 },
 
                 Some(ref current_node) => {
-                    if let Some(_) = current_node.left {
+                    if current_node.left.is_some() {
                         self.prev_nodes.push(&current_node);
                         self.current_tree = &current_node.left;
 
                         continue;
                     }
 
-                    let value = &current_node.value;
-
-                    if let Some(_) = current_node.right {
+                    if current_node.right.is_some() {
                         self.current_tree = &current_node.right;
 
-                        return Some(&current_node.value);
+                        return Some(current_node);
                     }
 
                     self.current_tree = &None;
 
-                    return Some(value);
+                    return Some(current_node);
                 }
             }
         }
@@ -138,135 +155,70 @@ impl<'a, T: 'a + Ord> Iterator for AvlTreeSetIter<'a, T> {
 }
 
 #[cfg(test)]
-mod tests {
-    use rand::random;
+mod specs {
+    use super::*;
+    use fake::dummy::Dummy;
     use std::cmp::max;
-    use std::collections::BTreeSet;
     use test::Bencher;
 
-    use super::*;
+    #[derive(Clone, Default, Debug)]
+    struct Environment {}
 
     #[test]
-    fn rotate_left_should_work() {
-        let mut root = AvlNode {
-            value: 0,
-            height: 3,
-            left: Some(Box::new(AvlNode {
-                value: 1,
-                height: 1,
-                left: None,
-                right: None,
-            })),
-            right: Some(Box::new(AvlNode {
-                value: 2,
-                height: 2,
-                left: Some(Box::new(AvlNode {
-                    value: 3,
-                    height: 1,
-                    left: None,
-                    right: None,
-                })),
-                right: None,
-            })),
-        };
+    fn spec() {
+        rspec::run(&rspec::describe(
+            "AVL Tree Set",
+            Environment::default(),
+            |ctx| {
+                ctx.it(".from_iter and .iter should work", |_| {
+                    let mut list = (0..100).map(|_| String::dummy()).collect::<Vec<_>>();
+                    let set = list.iter().cloned().collect::<AvlTreeSet<_>>();
 
-        root.rotate_left();
+                    list.sort();
 
-        assert_eq!(
-            root,
-            AvlNode {
-                value: 2,
-                height: 3,
-                left: Some(Box::new(AvlNode {
-                    value: 0,
-                    height: 2,
-                    left: Some(Box::new(AvlNode {
-                        value: 1,
-                        height: 1,
-                        left: None,
-                        right: None
-                    })),
-                    right: Some(Box::new(AvlNode {
-                        value: 3,
-                        height: 1,
-                        left: None,
-                        right: None
-                    })),
-                })),
-                right: None,
-            }
-        );
-    }
+                    set.iter()
+                        .zip(list.iter())
+                        .all(|(set_value, list_value)| set_value == list_value)
+                });
 
-    #[test]
-    fn rotate_right_should_work() {
-        let mut root = AvlNode {
-            value: 0,
-            height: 3,
-            left: Some(Box::new(AvlNode {
-                value: 2,
-                height: 2,
-                left: None,
-                right: Some(Box::new(AvlNode {
-                    value: 3,
-                    height: 1,
-                    left: None,
-                    right: None,
-                })),
-            })),
-            right: Some(Box::new(AvlNode {
-                value: 1,
-                height: 1,
-                left: None,
-                right: None,
-            })),
-        };
+                ctx.it("height should be recursively correct", |_| {
+                    let set = (0..100).map(|_| String::dummy()).collect::<AvlTreeSet<_>>();
 
-        root.rotate_right();
+                    set.node_iter()
+                        .all(|node| node.height == 1 + max(node.left_height(), node.right_height()))
+                });
 
-        assert_eq!(
-            root,
-            AvlNode {
-                value: 2,
-                height: 3,
-                left: None,
-                right: Some(Box::new(AvlNode {
-                    value: 0,
-                    height: 2,
-                    left: Some(Box::new(AvlNode {
-                        value: 3,
-                        height: 1,
-                        left: None,
-                        right: None
-                    })),
-                    right: Some(Box::new(AvlNode {
-                        value: 1,
-                        height: 1,
-                        left: None,
-                        right: None
-                    })),
-                })),
-            }
-        );
-    }
+                ctx.it(
+                    "left node should be recursively less than current node",
+                    |_| {
+                        let set = (0..100).map(|_| usize::dummy()).collect::<AvlTreeSet<_>>();
 
-    #[test]
-    fn should_work() {
-        let mut set = AvlTreeSet::<u8>::default();
-        let mut ordered_set = BTreeSet::<u8>::default();
+                        set.node_iter().all(|node| {
+                            if let Some(ref left_node) = node.left {
+                                left_node.value < node.value
+                            } else {
+                                true
+                            }
+                        })
+                    },
+                );
 
-        for _ in 1..256 {
-            let value = random::<u8>();
+                ctx.it(
+                    "right node should be recursively less than current node",
+                    |_| {
+                        let set = (0..100).map(|_| usize::dummy()).collect::<AvlTreeSet<_>>();
 
-            set.insert(value.clone());
-            ordered_set.insert(value.clone());
-        }
-
-        for pair in set.iter().zip(ordered_set.iter()) {
-            let (left, right) = pair;
-
-            assert_eq!(left, right);
-        }
+                        set.node_iter().all(|node| {
+                            if let Some(ref right_node) = node.right {
+                                node.value < right_node.value
+                            } else {
+                                true
+                            }
+                        })
+                    },
+                )
+            },
+        ));
     }
 
     #[bench]
@@ -278,67 +230,5 @@ mod tests {
                 set.insert(value);
             }
         });
-    }
-
-    #[test]
-    fn properties_should_be_correct() {
-        let mut tree = AvlTreeSet::<u8>::default();
-
-        for _ in 1..256 {
-            let value = random::<u8>();
-
-            tree.insert(value.clone());
-        }
-
-        let mut prev_nodes: Vec<&AvlNode<u8>> = Vec::default();
-        let mut current_tree: &AvlTree<u8> = &tree.root;
-
-        loop {
-            let this_node: &AvlNode<u8> = match current_tree {
-                None => match prev_nodes.pop() {
-                    None => {
-                        break;
-                    }
-
-                    Some(prev_node) => {
-                        current_tree = &prev_node.right;
-
-                        prev_node
-                    }
-                },
-
-                Some(current_node) => {
-                    if let Some(_) = current_node.left {
-                        prev_nodes.push(current_node);
-                        current_tree = &current_node.left;
-
-                        continue;
-                    }
-
-                    if let Some(_) = current_node.right {
-                        current_tree = &current_node.right;
-
-                        &current_node
-                    } else {
-                        current_tree = &None;
-
-                        &current_node
-                    }
-                }
-            };
-
-            assert_eq!(
-                this_node.height,
-                1 + max(this_node.left_height(), this_node.right_height())
-            );
-
-            if let Some(ref left_node) = this_node.left {
-                assert!(left_node.value < this_node.value);
-            }
-
-            if let Some(ref right_node) = this_node.right {
-                assert!(this_node.value < right_node.value);
-            }
-        }
     }
 }

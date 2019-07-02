@@ -55,8 +55,13 @@ impl<'a, T: 'a + Ord> AvlNode<T> {
 
         replace(&mut self.left, Some(Box::new(old_root)));
 
-        self.left.as_mut().map(|node| node.update_height());
-        self.right.as_mut().map(|node| node.update_height());
+        if let Some(node) = self.left.as_mut() {
+            node.update_height();
+        }
+
+        if let Some(node) = self.right.as_mut() {
+            node.update_height();
+        }
 
         self.update_height();
     }
@@ -68,8 +73,13 @@ impl<'a, T: 'a + Ord> AvlNode<T> {
 
         replace(&mut self.right, Some(Box::new(old_root)));
 
-        self.left.as_mut().map(|node| node.update_height());
-        self.right.as_mut().map(|node| node.update_height());
+        if let Some(node) = self.left.as_mut() {
+            node.update_height();
+        }
+
+        if let Some(node) = self.right.as_mut() {
+            node.update_height();
+        }
 
         self.update_height();
     }
@@ -78,108 +88,117 @@ impl<'a, T: 'a + Ord> AvlNode<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::prelude::*;
+
+    #[derive(Clone, Default, Debug)]
+    struct Environment {}
 
     #[test]
-    fn rotate_left_should_work() {
-        let mut root = AvlNode {
-            value: 0,
-            height: 3,
-            left: Some(Box::new(AvlNode {
-                value: 1,
-                height: 1,
-                left: None,
-                right: None,
-            })),
-            right: Some(Box::new(AvlNode {
-                value: 2,
-                height: 2,
-                left: Some(Box::new(AvlNode {
-                    value: 3,
-                    height: 1,
-                    left: None,
-                    right: None,
-                })),
-                right: None,
-            })),
-        };
+    fn spec() {
+        rspec::run(&rspec::describe(
+            "AVL Node",
+            Environment::default(),
+            |ctx| {
+                ctx.specify(".rotate_left", |ctx| {
+                    ctx.it("should work", |_| {
+                        let mut root = AvlNode {
+                            value: 0,
+                            height: 3,
+                            left: Some(Box::new(AvlNode {
+                                value: 1,
+                                height: 1,
+                                left: None,
+                                right: None,
+                            })),
+                            right: Some(Box::new(AvlNode {
+                                value: 2,
+                                height: 2,
+                                left: Some(Box::new(AvlNode {
+                                    value: 3,
+                                    height: 1,
+                                    left: None,
+                                    right: None,
+                                })),
+                                right: None,
+                            })),
+                        };
 
-        root.rotate_left();
+                        root.rotate_left();
 
-        assert_eq!(
-            root,
-            AvlNode {
-                value: 2,
-                height: 3,
-                left: Some(Box::new(AvlNode {
-                    value: 0,
-                    height: 2,
-                    left: Some(Box::new(AvlNode {
-                        value: 1,
-                        height: 1,
-                        left: None,
-                        right: None
-                    })),
-                    right: Some(Box::new(AvlNode {
-                        value: 3,
-                        height: 1,
-                        left: None,
-                        right: None
-                    })),
-                })),
-                right: None,
-            }
-        );
-    }
+                        root == AvlNode {
+                            value: 2,
+                            height: 3,
+                            left: Some(Box::new(AvlNode {
+                                value: 0,
+                                height: 2,
+                                left: Some(Box::new(AvlNode {
+                                    value: 1,
+                                    height: 1,
+                                    left: None,
+                                    right: None,
+                                })),
+                                right: Some(Box::new(AvlNode {
+                                    value: 3,
+                                    height: 1,
+                                    left: None,
+                                    right: None,
+                                })),
+                            })),
+                            right: None,
+                        }
+                    });
+                });
 
-    #[test]
-    fn rotate_right_should_work() {
-        let mut root = AvlNode {
-            value: 0,
-            height: 3,
-            left: Some(Box::new(AvlNode {
-                value: 2,
-                height: 2,
-                left: None,
-                right: Some(Box::new(AvlNode {
-                    value: 3,
-                    height: 1,
-                    left: None,
-                    right: None,
-                })),
-            })),
-            right: Some(Box::new(AvlNode {
-                value: 1,
-                height: 1,
-                left: None,
-                right: None,
-            })),
-        };
+                ctx.specify(".rotate_right", |ctx| {
+                    ctx.it("should work", |_| {
+                        let mut root = AvlNode {
+                            value: 0,
+                            height: 3,
+                            left: Some(Box::new(AvlNode {
+                                value: 2,
+                                height: 2,
+                                left: None,
+                                right: Some(Box::new(AvlNode {
+                                    value: 3,
+                                    height: 1,
+                                    left: None,
+                                    right: None,
+                                })),
+                            })),
+                            right: Some(Box::new(AvlNode {
+                                value: 1,
+                                height: 1,
+                                left: None,
+                                right: None,
+                            })),
+                        };
 
-        root.rotate_right();
+                        root.rotate_right();
 
-        assert_eq!(
-            root,
-            AvlNode {
-                value: 2,
-                height: 3,
-                left: None,
-                right: Some(Box::new(AvlNode {
-                    value: 0,
-                    height: 2,
-                    left: Some(Box::new(AvlNode {
-                        value: 3,
-                        height: 1,
-                        left: None,
-                        right: None
-                    })),
-                    right: Some(Box::new(AvlNode {
-                        value: 1,
-                        height: 1,
-                        left: None,
-                        right: None
-                    })),
-                })),
-            }
-        );
+                        root == AvlNode {
+                            value: 2,
+                            height: 3,
+                            left: None,
+                            right: Some(Box::new(AvlNode {
+                                value: 0,
+                                height: 2,
+                                left: Some(Box::new(AvlNode {
+                                    value: 3,
+                                    height: 1,
+                                    left: None,
+                                    right: None,
+                                })),
+                                right: Some(Box::new(AvlNode {
+                                    value: 1,
+                                    height: 1,
+                                    left: None,
+                                    right: None,
+                                })),
+                            })),
+                        }
+                    });
+                })
+            },
+        ));
     }
 }

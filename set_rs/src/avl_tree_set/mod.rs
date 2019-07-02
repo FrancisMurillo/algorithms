@@ -1,2 +1,2 @@
-mod set;
-pub mod tree;
+pub mod set;
+mod tree;
