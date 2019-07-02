@@ -82,6 +82,14 @@ impl<'a, T: 'a + Ord> AvlTreeSet<T> {
         true
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.root.is_none()
+    }
+
+    pub fn len(&self) -> usize {
+        self.iter().count()
+    }
+
     #[deny(clippy::all)]
     pub fn iter(&self) -> Map<AvlTreeSetNodeIter<'_, T>, fn(&'_ AvlNode<T>) -> &'_ T> {
         self.node_iter().map(|node| &node.value)
@@ -158,6 +166,7 @@ impl<'a, T: 'a + Ord> Iterator for AvlTreeSetNodeIter<'a, T> {
 mod specs {
     use super::*;
     use fake::dummy::Dummy;
+    use rand::random;
     use std::cmp::max;
     use test::Bencher;
 
@@ -216,7 +225,18 @@ mod specs {
                             }
                         })
                     },
-                )
+                );
+
+                ctx.it(".len should work", |_| {
+                    let size = random::<u8>();
+                    let set = (0..size).map(|_| isize::dummy()).collect::<AvlTreeSet<_>>();
+
+                    set.len() == size as usize
+                });
+
+                ctx.it(".is_empty should work", |_| {
+                    AvlTreeSet::<String>::default().is_empty()
+                });
             },
         ));
     }
