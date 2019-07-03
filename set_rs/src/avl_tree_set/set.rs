@@ -14,6 +14,11 @@ impl<'a, T: 'a + Ord> Default for AvlTreeSet<T> {
     }
 }
 
+enum NodePath {
+    Left,
+    Right,
+}
+
 impl<'a, T: 'a + Ord> AvlTreeSet<T> {
     pub fn insert(&mut self, value: T) -> bool {
         let mut prev_nodes = Vec::<*mut AvlNode<T>>::default();
@@ -80,6 +85,45 @@ impl<'a, T: 'a + Ord> AvlTreeSet<T> {
         }
 
         true
+    }
+
+    pub fn remove(&mut self, value: &T) -> bool {
+        let mut prev_nodes = Vec::<(*mut AvlNode<T>, NodePath)>::default();
+        let mut current_tree = &mut self.root;
+        let mut target_value = None;
+
+        while let Some(current_node) = current_tree {
+            match current_node.value.cmp(&value) {
+                Less => {
+                    prev_nodes.push((&mut **current_node, NodePath::Left));
+                    current_tree = &mut current_node.right;
+                }
+                Equal => {
+                    target_value = Some(&mut **current_node);
+                    break;
+                }
+                Greater => {
+                    prev_nodes.push((&mut **current_node, NodePath::Right));
+                    current_tree = &mut current_node.left;
+                }
+            };
+        }
+
+        if target_value.is_none() {
+            return false;
+        }
+
+        let target_node = target_value.unwrap();
+
+        if target_node.left.is_none() && target_node.right.is_none() {
+            let (x, y) = prev_nodes.pop()
+        }
+
+        true
+    }
+
+    pub fn clear(&mut self) {
+        self.root.take();
     }
 
     pub fn is_empty(&self) -> bool {
@@ -187,58 +231,81 @@ mod specs {
 
                     set.iter()
                         .zip(list.iter())
-                        .all(|(set_value, list_value)| set_value == list_value)
+                        .for_each(|(set_value, list_value)| assert_eq!(set_value, list_value));
                 });
 
-                ctx.it("height should be recursively correct", |_| {
-                    let set = (0..100).map(|_| String::dummy()).collect::<AvlTreeSet<_>>();
+                ctx.specify("tree properties", |ctx| {
+                    ctx.it("height should be balanced", |_| {
+                        let set = (0..100).map(|_| String::dummy()).collect::<AvlTreeSet<_>>();
 
-                    set.node_iter()
-                        .all(|node| node.height == 1 + max(node.left_height(), node.right_height()))
-                });
+                        set.node_iter().for_each(|node| {
+                            assert_eq!(
+                                node.height,
+                                1 + max(node.left_height(), node.right_height())
+                            );
+                        });
+                    });
 
-                ctx.it(
-                    "left node should be recursively less than current node",
-                    |_| {
+                    ctx.it("nodes should be ordered", |_| {
                         let set = (0..100).map(|_| usize::dummy()).collect::<AvlTreeSet<_>>();
 
-                        set.node_iter().all(|node| {
+                        set.node_iter().for_each(|node| {
                             if let Some(ref left_node) = node.left {
-                                left_node.value < node.value
-                            } else {
-                                true
+                                assert!(left_node.value < node.value);
                             }
-                        })
-                    },
-                );
 
-                ctx.it(
-                    "right node should be recursively less than current node",
-                    |_| {
-                        let set = (0..100).map(|_| usize::dummy()).collect::<AvlTreeSet<_>>();
-
-                        set.node_iter().all(|node| {
                             if let Some(ref right_node) = node.right {
-                                node.value < right_node.value
-                            } else {
-                                true
+                                assert!(node.value < right_node.value);
                             }
-                        })
-                    },
-                );
+                        });
+                    });
+                });
+
+                ctx.it(".insert should work", |_| {
+                    let mut set = AvlTreeSet::<isize>::default();
+                    let value = isize::dummy();
+
+                    assert!(set.insert(value));
+                    assert!(!set.insert(value));
+                });
 
                 ctx.it(".len should work", |_| {
                     let size = random::<u8>();
                     let set = (0..size).map(|_| isize::dummy()).collect::<AvlTreeSet<_>>();
 
-                    set.len() == size as usize
+                    assert_eq!(set.len(), size as usize);
                 });
 
                 ctx.it(".is_empty should work", |_| {
-                    AvlTreeSet::<String>::default().is_empty()
+                    let mut set = AvlTreeSet::<String>::default();
+
+                    assert!(set.is_empty());
+
+                    set.insert(String::dummy());
+
+                    assert!(!set.is_empty());
+                });
+
+                ctx.it(".clear should work", |_| {
+                    let mut set = (0..random::<u8>())
+                        .map(|_| isize::dummy())
+                        .collect::<AvlTreeSet<_>>();
+
+                    set.clear();
+
+                    assert!(set.is_empty());
                 });
             },
         ));
+    }
+
+    #[test]
+    fn sandbox() {
+        let mut set = (0..random::<u8>())
+            .map(|_| isize::dummy())
+            .collect::<AvlTreeSet<_>>();
+
+        set.clear();
     }
 
     #[bench]
