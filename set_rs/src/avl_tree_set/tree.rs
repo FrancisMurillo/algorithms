@@ -83,6 +83,44 @@ impl<'a, T: 'a + Ord> AvlNode<T> {
 
         self.update_height();
     }
+
+    pub fn rebalance(&mut self) {
+        match self.balance_factor() {
+            -2 => {
+                let right_node = self.right.as_mut().unwrap();
+
+                match right_node.balance_factor() {
+                    -1 => {
+                        self.rotate_left();
+                    }
+
+                    1 => {
+                        right_node.rotate_right();
+                        self.rotate_left();
+                    }
+
+                    _ => {}
+                }
+            }
+            2 => {
+                let left_node = self.left.as_mut().unwrap();
+
+                match left_node.balance_factor() {
+                    1 => {
+                        self.rotate_right();
+                    }
+
+                    -1 => {
+                        left_node.rotate_left();
+                        self.rotate_right();
+                    }
+
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 #[cfg(test)]

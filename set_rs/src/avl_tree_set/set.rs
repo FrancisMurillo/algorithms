@@ -1,25 +1,21 @@
 use super::tree::{AvlNode, AvlTree};
 use core::iter::Map;
-use std::cmp::Ordering::{Equal, Greater, Less};
+use std::cmp::Ordering;
 use std::iter::FromIterator;
+use std::mem;
 
 #[derive(Debug, PartialEq)]
-pub struct AvlTreeSet<T: Ord> {
+pub struct AvlTreeSet<T: Ord + std::fmt::Debug> {
     root: AvlTree<T>,
 }
 
-impl<'a, T: 'a + Ord> Default for AvlTreeSet<T> {
+impl<'a, T: 'a + Ord + std::fmt::Debug> Default for AvlTreeSet<T> {
     fn default() -> Self {
         Self { root: None }
     }
 }
 
-enum NodePath {
-    Left,
-    Right,
-}
-
-impl<'a, T: 'a + Ord> AvlTreeSet<T> {
+impl<'a, T: 'a + Ord + std::fmt::Debug> AvlTreeSet<T> {
     pub fn insert(&mut self, value: T) -> bool {
         let mut prev_nodes = Vec::<*mut AvlNode<T>>::default();
         let mut current_tree = &mut self.root;
@@ -28,11 +24,11 @@ impl<'a, T: 'a + Ord> AvlTreeSet<T> {
             prev_nodes.push(&mut **current_node);
 
             match current_node.value.cmp(&value) {
-                Less => current_tree = &mut current_node.right,
-                Equal => {
+                Ordering::Less => current_tree = &mut current_node.right,
+                Ordering::Equal => {
                     return false;
                 }
-                Greater => current_tree = &mut current_node.left,
+                Ordering::Greater => current_tree = &mut current_node.left,
             }
         }
 
@@ -43,67 +39,32 @@ impl<'a, T: 'a + Ord> AvlTreeSet<T> {
             height: 1,
         }));
 
-        for node in prev_nodes.into_iter().rev() {
-            let parent_node = unsafe { &mut *node };
-            parent_node.update_height();
-
-            match parent_node.balance_factor() {
-                -2 => {
-                    let right_node = parent_node.right.as_mut().unwrap();
-
-                    match right_node.balance_factor() {
-                        -1 => {
-                            parent_node.rotate_left();
-                        }
-
-                        1 => {
-                            right_node.rotate_right();
-                            parent_node.rotate_left();
-                        }
-
-                        _ => {}
-                    }
-                }
-                2 => {
-                    let left_node = parent_node.left.as_mut().unwrap();
-
-                    match left_node.balance_factor() {
-                        1 => {
-                            parent_node.rotate_right();
-                        }
-
-                        -1 => {
-                            left_node.rotate_left();
-                            parent_node.rotate_right();
-                        }
-
-                        _ => {}
-                    }
-                }
-                _ => {}
-            }
+        for node_ptr in prev_nodes.into_iter().rev() {
+            let node = unsafe { &mut *node_ptr };
+            node.update_height();
+            node.rebalance();
         }
 
         true
     }
 
     pub fn remove(&mut self, value: &T) -> bool {
-        let mut prev_nodes = Vec::<(*mut AvlNode<T>, NodePath)>::default();
+        let mut prev_ptrs = Vec::<*mut AvlNode<T>>::default();
         let mut current_tree = &mut self.root;
         let mut target_value = None;
 
         while let Some(current_node) = current_tree {
             match current_node.value.cmp(&value) {
-                Less => {
-                    prev_nodes.push((&mut **current_node, NodePath::Left));
+                Ordering::Less => {
+                    prev_ptrs.push(&mut **current_node);
                     current_tree = &mut current_node.right;
                 }
-                Equal => {
+                Ordering::Equal => {
                     target_value = Some(&mut **current_node);
                     break;
                 }
-                Greater => {
-                    prev_nodes.push((&mut **current_node, NodePath::Right));
+                Ordering::Greater => {
+                    prev_ptrs.push(&mut **current_node);
                     current_tree = &mut current_node.left;
                 }
             };
@@ -115,8 +76,71 @@ impl<'a, T: 'a + Ord> AvlTreeSet<T> {
 
         let target_node = target_value.unwrap();
 
-        if target_node.left.is_none() && target_node.right.is_none() {
-            let (x, y) = prev_nodes.pop()
+        dbg!(&target_node);
+
+        if target_node.left.is_none() || target_node.right.is_none() {
+            if let Some(mut left_node) = target_node.left.take() {
+                mem::swap(target_node, &mut left_node);
+            } else if let Some(mut right_node) = target_node.right.take() {
+                mem::swap(target_node, &mut right_node);
+            } else if let Some(prev_ptr) = prev_ptrs.pop() {
+                let prev_node = unsafe { &mut *prev_ptr };
+
+                if prev_node
+                    .left
+                    .as_ref()
+                    .unwrap()
+                    .value
+                    .cmp(&target_node.value)
+                    == Ordering::Equal
+                {
+                    prev_node.left.take();
+                } else {
+                    prev_node.right.take();
+                }
+            } else {
+                self.root = None;
+                return true;
+            }
+        } else {
+            let right_tree = &mut target_node.right;
+
+            dbg!(&right_tree);
+
+            if right_tree.as_ref().unwrap().left.is_none() {
+                let mut right_node = right_tree.take().unwrap();
+
+                mem::swap(&mut target_node.value, &mut right_node.value);
+                mem::replace(&mut target_node.right, right_node.right);
+            } else {
+                let mut next_tree = right_tree;
+                let mut tracked_nodes = Vec::<*mut AvlNode<T>>::default();
+
+                while let Some(next_left_node) = next_tree {
+                    tracked_nodes.push(&mut **next_left_node);
+                    next_tree = &mut next_left_node.left;
+                }
+
+                let leftmost_node = unsafe { &mut *tracked_nodes.pop().unwrap() };
+                let parent_left_node = unsafe { &mut *tracked_nodes.pop().unwrap() };
+
+                mem::swap(&mut target_node.value, &mut leftmost_node.value);
+                mem::swap(&mut parent_left_node.left, &mut leftmost_node.right);
+
+                for node_ptr in tracked_nodes.into_iter().rev() {
+                    let node = unsafe { &mut *node_ptr };
+                    node.update_height();
+                }
+            }
+        }
+
+        target_node.update_height();
+        target_node.rebalance();
+
+        for node_ptr in prev_ptrs.into_iter().rev() {
+            let node = unsafe { &mut *node_ptr };
+            node.update_height();
+            node.rebalance();
         }
 
         true
@@ -147,7 +171,7 @@ impl<'a, T: 'a + Ord> AvlTreeSet<T> {
     }
 }
 
-impl<T: Ord> FromIterator<T> for AvlTreeSet<T> {
+impl<T: Ord + std::fmt::Debug> FromIterator<T> for AvlTreeSet<T> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         let mut set = Self::default();
 
@@ -160,12 +184,12 @@ impl<T: Ord> FromIterator<T> for AvlTreeSet<T> {
 }
 
 #[derive(Debug)]
-pub struct AvlTreeSetNodeIter<'a, T: 'a + Ord> {
+pub struct AvlTreeSetNodeIter<'a, T: 'a + Ord + std::fmt::Debug> {
     prev_nodes: Vec<&'a AvlNode<T>>,
     current_tree: &'a AvlTree<T>,
 }
 
-impl<'a, T: 'a + Ord> Iterator for AvlTreeSetNodeIter<'a, T> {
+impl<'a, T: 'a + Ord + std::fmt::Debug> Iterator for AvlTreeSetNodeIter<'a, T> {
     type Item = &'a AvlNode<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -301,11 +325,10 @@ mod specs {
 
     #[test]
     fn sandbox() {
-        let mut set = (0..random::<u8>())
-            .map(|_| isize::dummy())
-            .collect::<AvlTreeSet<_>>();
+        let mut set = (1..8).collect::<AvlTreeSet<_>>();
 
-        set.clear();
+        set.remove(&4);
+        dbg!(&set);
     }
 
     #[bench]
