@@ -2,26 +2,26 @@ use super::tree::{AvlNode, AvlTree};
 use core::iter::Map;
 use std::cmp::Ordering;
 use std::iter::FromIterator;
-use std::mem;
+use std::mem::{replace, swap};
 
 #[derive(Debug, PartialEq)]
-pub struct AvlTreeSet<T: Ord + std::fmt::Debug> {
+pub struct AvlTreeSet<T: Ord> {
     root: AvlTree<T>,
 }
 
-impl<'a, T: 'a + Ord + std::fmt::Debug> Default for AvlTreeSet<T> {
+impl<'a, T: 'a + Ord> Default for AvlTreeSet<T> {
     fn default() -> Self {
         Self { root: None }
     }
 }
 
-impl<'a, T: 'a + Ord + std::fmt::Debug> AvlTreeSet<T> {
+impl<'a, T: 'a + Ord> AvlTreeSet<T> {
     pub fn insert(&mut self, value: T) -> bool {
-        let mut prev_nodes = Vec::<*mut AvlNode<T>>::default();
+        let mut prev_ptrs = Vec::<*mut AvlNode<T>>::default();
         let mut current_tree = &mut self.root;
 
         while let Some(current_node) = current_tree {
-            prev_nodes.push(&mut **current_node);
+            prev_ptrs.push(&mut **current_node);
 
             match current_node.value.cmp(&value) {
                 Ordering::Less => current_tree = &mut current_node.right,
@@ -39,7 +39,7 @@ impl<'a, T: 'a + Ord + std::fmt::Debug> AvlTreeSet<T> {
             height: 1,
         }));
 
-        for node_ptr in prev_nodes.into_iter().rev() {
+        for node_ptr in prev_ptrs.into_iter().rev() {
             let node = unsafe { &mut *node_ptr };
             node.update_height();
             node.rebalance();
@@ -76,28 +76,25 @@ impl<'a, T: 'a + Ord + std::fmt::Debug> AvlTreeSet<T> {
 
         let target_node = target_value.unwrap();
 
-        dbg!(&target_node);
-
         if target_node.left.is_none() || target_node.right.is_none() {
             if let Some(mut left_node) = target_node.left.take() {
-                mem::swap(target_node, &mut left_node);
+                swap(target_node, &mut left_node);
             } else if let Some(mut right_node) = target_node.right.take() {
-                mem::swap(target_node, &mut right_node);
+                swap(target_node, &mut right_node);
             } else if let Some(prev_ptr) = prev_ptrs.pop() {
                 let prev_node = unsafe { &mut *prev_ptr };
 
-                if prev_node
-                    .left
-                    .as_ref()
-                    .unwrap()
-                    .value
-                    .cmp(&target_node.value)
-                    == Ordering::Equal
-                {
-                    prev_node.left.take();
+                if let Some(ref left_node) = prev_node.left {
+                    if left_node.value == target_node.value {
+                        prev_node.left.take();
+                    } else {
+                        prev_node.right.take();
+                    }
                 } else {
                     prev_node.right.take();
                 }
+
+                prev_node.update_height();
             } else {
                 self.root = None;
                 return true;
@@ -105,13 +102,13 @@ impl<'a, T: 'a + Ord + std::fmt::Debug> AvlTreeSet<T> {
         } else {
             let right_tree = &mut target_node.right;
 
-            dbg!(&right_tree);
-
             if right_tree.as_ref().unwrap().left.is_none() {
                 let mut right_node = right_tree.take().unwrap();
 
-                mem::swap(&mut target_node.value, &mut right_node.value);
-                mem::replace(&mut target_node.right, right_node.right);
+                swap(&mut target_node.value, &mut right_node.value);
+                replace(&mut target_node.right, right_node.right);
+
+                target_node.update_height();
             } else {
                 let mut next_tree = right_tree;
                 let mut tracked_nodes = Vec::<*mut AvlNode<T>>::default();
@@ -124,8 +121,11 @@ impl<'a, T: 'a + Ord + std::fmt::Debug> AvlTreeSet<T> {
                 let leftmost_node = unsafe { &mut *tracked_nodes.pop().unwrap() };
                 let parent_left_node = unsafe { &mut *tracked_nodes.pop().unwrap() };
 
-                mem::swap(&mut target_node.value, &mut leftmost_node.value);
-                mem::swap(&mut parent_left_node.left, &mut leftmost_node.right);
+                swap(&mut target_node.value, &mut leftmost_node.value);
+                swap(&mut parent_left_node.left, &mut leftmost_node.right);
+
+                parent_left_node.update_height();
+                target_node.update_height();
 
                 for node_ptr in tracked_nodes.into_iter().rev() {
                     let node = unsafe { &mut *node_ptr };
@@ -171,7 +171,7 @@ impl<'a, T: 'a + Ord + std::fmt::Debug> AvlTreeSet<T> {
     }
 }
 
-impl<T: Ord + std::fmt::Debug> FromIterator<T> for AvlTreeSet<T> {
+impl<T: Ord> FromIterator<T> for AvlTreeSet<T> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         let mut set = Self::default();
 
@@ -184,12 +184,12 @@ impl<T: Ord + std::fmt::Debug> FromIterator<T> for AvlTreeSet<T> {
 }
 
 #[derive(Debug)]
-pub struct AvlTreeSetNodeIter<'a, T: 'a + Ord + std::fmt::Debug> {
+pub struct AvlTreeSetNodeIter<'a, T: 'a + Ord> {
     prev_nodes: Vec<&'a AvlNode<T>>,
     current_tree: &'a AvlTree<T>,
 }
 
-impl<'a, T: 'a + Ord + std::fmt::Debug> Iterator for AvlTreeSetNodeIter<'a, T> {
+impl<'a, T: 'a + Ord> Iterator for AvlTreeSetNodeIter<'a, T> {
     type Item = &'a AvlNode<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -234,12 +234,34 @@ impl<'a, T: 'a + Ord + std::fmt::Debug> Iterator for AvlTreeSetNodeIter<'a, T> {
 mod specs {
     use super::*;
     use fake::dummy::Dummy;
+    use itertools::{assert_equal, Itertools};
     use rand::random;
     use std::cmp::max;
     use test::Bencher;
 
     #[derive(Clone, Default, Debug)]
     struct Environment {}
+
+    fn check_height<T: Ord>(set: &AvlTreeSet<T>) {
+        set.node_iter().for_each(|node| {
+            assert_eq!(
+                node.height,
+                1 + max(node.left_height(), node.right_height())
+            );
+        });
+    }
+
+    fn check_ordering<T: Ord>(set: &AvlTreeSet<T>) {
+        set.node_iter().for_each(|node| {
+            if let Some(ref left_node) = node.left {
+                assert!(left_node.value < node.value);
+            }
+
+            if let Some(ref right_node) = node.right {
+                assert!(node.value < right_node.value);
+            }
+        });
+    }
 
     #[test]
     fn spec() {
@@ -248,41 +270,15 @@ mod specs {
             Environment::default(),
             |ctx| {
                 ctx.it(".from_iter and .iter should work", |_| {
-                    let mut list = (0..100).map(|_| String::dummy()).collect::<Vec<_>>();
+                    let mut list = (0..100)
+                        .map(|_| String::dummy())
+                        .unique()
+                        .collect::<Vec<_>>();
                     let set = list.iter().cloned().collect::<AvlTreeSet<_>>();
 
                     list.sort();
 
-                    set.iter()
-                        .zip(list.iter())
-                        .for_each(|(set_value, list_value)| assert_eq!(set_value, list_value));
-                });
-
-                ctx.specify("tree properties", |ctx| {
-                    ctx.it("height should be balanced", |_| {
-                        let set = (0..100).map(|_| String::dummy()).collect::<AvlTreeSet<_>>();
-
-                        set.node_iter().for_each(|node| {
-                            assert_eq!(
-                                node.height,
-                                1 + max(node.left_height(), node.right_height())
-                            );
-                        });
-                    });
-
-                    ctx.it("nodes should be ordered", |_| {
-                        let set = (0..100).map(|_| usize::dummy()).collect::<AvlTreeSet<_>>();
-
-                        set.node_iter().for_each(|node| {
-                            if let Some(ref left_node) = node.left {
-                                assert!(left_node.value < node.value);
-                            }
-
-                            if let Some(ref right_node) = node.right {
-                                assert!(node.value < right_node.value);
-                            }
-                        });
-                    });
+                    assert_equal(list.iter(), set.iter());
                 });
 
                 ctx.it(".insert should work", |_| {
@@ -295,7 +291,10 @@ mod specs {
 
                 ctx.it(".len should work", |_| {
                     let size = random::<u8>();
-                    let set = (0..size).map(|_| isize::dummy()).collect::<AvlTreeSet<_>>();
+                    let set = (0..size)
+                        .map(|_| isize::dummy())
+                        .unique()
+                        .collect::<AvlTreeSet<_>>();
 
                     assert_eq!(set.len(), size as usize);
                 });
@@ -313,23 +312,37 @@ mod specs {
                 ctx.it(".clear should work", |_| {
                     let mut set = (0..random::<u8>())
                         .map(|_| isize::dummy())
+                        .unique()
                         .collect::<AvlTreeSet<_>>();
 
                     set.clear();
 
                     assert!(set.is_empty());
                 });
+
+                ctx.it(".remove should work", |_| {
+                    let list = (0..random::<u8>())
+                        .map(|_| u8::dummy())
+                        .unique()
+                        .collect::<Vec<_>>();
+                    let mut set = list.iter().cloned().collect::<AvlTreeSet<_>>();
+
+                    for item in list {
+                        assert!(set.remove(&item));
+                        check_ordering(&set);
+                        check_height(&set);
+
+                        assert!(!set.remove(&item));
+                    }
+
+                    assert!(!set.remove(&u8::dummy()));
+                });
             },
         ));
     }
 
     #[test]
-    fn sandbox() {
-        let mut set = (1..8).collect::<AvlTreeSet<_>>();
-
-        set.remove(&4);
-        dbg!(&set);
-    }
+    fn sandbox() {}
 
     #[bench]
     fn bench_insert(b: &mut Bencher) {
