@@ -166,6 +166,32 @@ impl<'a, T: 'a + Ord> AvlTreeSet<T> {
         false
     }
 
+    pub fn append(&mut self, other: &mut Self) {
+        if other.is_empty() {
+            return;
+        }
+
+        let mut remaining_nodes = Vec::<AvlNode<T>>::default();
+
+        remaining_nodes.push(*other.root.take().unwrap());
+
+        while let Some(mut this_node) = remaining_nodes.pop() {
+            loop {
+                self.insert(this_node.value);
+
+                if let Some(right_node) = this_node.right.take() {
+                    remaining_nodes.push(*right_node);
+                }
+
+                if let Some(next_node) = this_node.left.take() {
+                    this_node = *next_node;
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+
     pub fn clear(&mut self) {
         self.root.take();
     }
@@ -379,12 +405,36 @@ mod specs {
                         assert!(!set.contains(&value));
                     }
                 });
+
+                ctx.it(".append should work", |_| {
+                    let list = (0..4).map(|_| u16::dummy()).unique().collect::<Vec<_>>();
+
+                    let (even_list, odd_list): (Vec<_>, Vec<_>) =
+                        list.iter().cloned().partition(|&n| n % 2 == 0);
+
+                    let mut even_set = even_list.iter().collect::<AvlTreeSet<_>>();
+                    let mut odd_set = odd_list.iter().collect::<AvlTreeSet<_>>();
+
+                    let odd_length = odd_set.len();
+                    let even_length = even_set.len();
+                    even_set.append(&mut odd_set);
+
+                    assert!(odd_set.is_empty());
+                    assert_eq!(even_set.len(), odd_length + even_length);
+                });
             },
         ));
     }
 
     #[test]
-    fn sandbox() {}
+    fn sandbox() {
+        let mut this_set = AvlTreeSet::default();
+        let mut other_set = (1..16).collect::<AvlTreeSet<_>>();
+
+        this_set.append(&mut other_set);
+
+        dbg!(this_set);
+    }
 
     #[bench]
     fn bench_insert(b: &mut Bencher) {
