@@ -16,6 +16,10 @@ impl<'a, T: 'a + Ord> Default for AvlTreeSet<T> {
 }
 
 impl<'a, T: 'a + Ord> AvlTreeSet<T> {
+    pub fn new() -> Self {
+        Self { root: None }
+    }
+
     pub fn insert(&mut self, value: T) -> bool {
         let mut prev_ptrs = Vec::<*mut AvlNode<T>>::default();
         let mut current_tree = &mut self.root;
@@ -48,7 +52,7 @@ impl<'a, T: 'a + Ord> AvlTreeSet<T> {
         true
     }
 
-    pub fn remove(&mut self, value: &T) -> bool {
+    pub fn take(&mut self, value: &T) -> Option<T> {
         let mut prev_ptrs = Vec::<*mut AvlNode<T>>::default();
         let mut current_tree = &mut self.root;
         let mut target_value = None;
@@ -71,41 +75,43 @@ impl<'a, T: 'a + Ord> AvlTreeSet<T> {
         }
 
         if target_value.is_none() {
-            return false;
+            return None;
         }
 
         let target_node = target_value.unwrap();
+        let mut taken_value = None;
 
         if target_node.left.is_none() || target_node.right.is_none() {
-            if let Some(mut left_node) = target_node.left.take() {
-                swap(target_node, &mut left_node);
-            } else if let Some(mut right_node) = target_node.right.take() {
-                swap(target_node, &mut right_node);
+            if let Some(left_node) = target_node.left.take() {
+                taken_value = Some(replace(target_node, *left_node).value);
+            } else if let Some(right_node) = target_node.right.take() {
+                taken_value = Some(replace(target_node, *right_node).value);
             } else if let Some(prev_ptr) = prev_ptrs.pop() {
                 let prev_node = unsafe { &mut *prev_ptr };
 
-                if let Some(ref left_node) = prev_node.left {
+                let inner_value = if let Some(ref left_node) = prev_node.left {
                     if left_node.value == target_node.value {
-                        prev_node.left.take();
+                        prev_node.left.take().unwrap().value
                     } else {
-                        prev_node.right.take();
+                        prev_node.right.take().unwrap().value
                     }
                 } else {
-                    prev_node.right.take();
-                }
+                    prev_node.right.take().unwrap().value
+                };
+
+                taken_value = Some(inner_value);
 
                 prev_node.update_height();
             } else {
-                self.root = None;
-                return true;
+                return Some(self.root.take().unwrap().value);
             }
         } else {
             let right_tree = &mut target_node.right;
 
             if right_tree.as_ref().unwrap().left.is_none() {
-                let mut right_node = right_tree.take().unwrap();
+                let right_node = right_tree.take().unwrap();
 
-                swap(&mut target_node.value, &mut right_node.value);
+                taken_value = Some(replace(&mut target_node.value, right_node.value));
                 replace(&mut target_node.right, right_node.right);
 
                 target_node.update_height();
@@ -114,14 +120,16 @@ impl<'a, T: 'a + Ord> AvlTreeSet<T> {
                 let mut tracked_nodes = Vec::<*mut AvlNode<T>>::default();
 
                 while let Some(next_left_node) = next_tree {
-                    tracked_nodes.push(&mut **next_left_node);
+                    if next_left_node.left.is_some() {
+                        tracked_nodes.push(&mut **next_left_node);
+                    }
                     next_tree = &mut next_left_node.left;
                 }
 
-                let leftmost_node = unsafe { &mut *tracked_nodes.pop().unwrap() };
                 let parent_left_node = unsafe { &mut *tracked_nodes.pop().unwrap() };
+                let mut leftmost_node = parent_left_node.left.take().unwrap();
 
-                swap(&mut target_node.value, &mut leftmost_node.value);
+                taken_value = Some(replace(&mut target_node.value, leftmost_node.value));
                 swap(&mut parent_left_node.left, &mut leftmost_node.right);
 
                 parent_left_node.update_height();
@@ -143,7 +151,11 @@ impl<'a, T: 'a + Ord> AvlTreeSet<T> {
             node.rebalance();
         }
 
-        true
+        taken_value
+    }
+
+    pub fn remove(&mut self, value: &T) -> bool {
+        self.take(value).is_some()
     }
 
     pub fn contains(&self, value: &T) -> bool {
@@ -386,7 +398,7 @@ mod specs {
                     assert!(set.is_empty());
                 });
 
-                ctx.it(".remove should work", |_| {
+                ctx.it(".remove and .take should work", |_| {
                     let list = (0..random::<u8>())
                         .map(|_| u8::dummy())
                         .unique()
@@ -401,7 +413,7 @@ mod specs {
                         assert!(!set.remove(&item));
                     }
 
-                    assert!(!set.remove(&u8::dummy()));
+                    assert_eq!(set.take(&u8::dummy()), None);
                 });
 
                 ctx.it(".contains and .get should work", |_| {
