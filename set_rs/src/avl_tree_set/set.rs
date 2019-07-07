@@ -166,6 +166,26 @@ impl<'a, T: 'a + Ord> AvlTreeSet<T> {
         false
     }
 
+    pub fn get(&self, value: &T) -> Option<&T> {
+        let mut current_tree = &self.root;
+
+        while let Some(current_node) = current_tree {
+            match current_node.value.cmp(&value) {
+                Ordering::Less => {
+                    current_tree = &current_node.right;
+                }
+                Ordering::Equal => {
+                    return Some(&current_node.value);
+                }
+                Ordering::Greater => {
+                    current_tree = &current_node.left;
+                }
+            };
+        }
+
+        None
+    }
+
     pub fn append(&mut self, other: &mut Self) {
         if other.is_empty() {
             return;
@@ -384,7 +404,7 @@ mod specs {
                     assert!(!set.remove(&u8::dummy()));
                 });
 
-                ctx.it(".contains should work", |_| {
+                ctx.it(".contains and .get should work", |_| {
                     let mut set = (0..random::<u8>())
                         .map(|_| isize::dummy())
                         .unique()
@@ -392,6 +412,7 @@ mod specs {
 
                     for value in set.iter() {
                         assert!(set.contains(&value));
+                        assert_eq!(set.get(&value), Some(value));
                     }
 
                     let copied_values = set
@@ -403,6 +424,7 @@ mod specs {
                     for value in copied_values {
                         set.remove(&value);
                         assert!(!set.contains(&value));
+                        assert_eq!(set.get(&value), None);
                     }
                 });
 
