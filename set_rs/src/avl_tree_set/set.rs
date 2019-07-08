@@ -1,5 +1,5 @@
 use super::tree::{AvlNode, AvlTree};
-use core::iter::{Filter, Map, Peekable};
+use core::iter::{Chain, Filter, Map, Peekable};
 use std::cmp::Ordering;
 use std::iter::FromIterator;
 use std::mem::{replace, swap};
@@ -279,8 +279,7 @@ impl<'a, T: 'a + Ord> AvlTreeSet<T> {
         impl FnMut(&'a AvlNode<T>) -> &'a T,
         impl FnMut(&&'a T) -> bool,
     > {
-        self.union(other)
-            .filter(move |&value| !(other.contains(value) && self.contains(value)))
+        self.difference(&other).chain(other.difference(&self))
     }
 }
 
@@ -352,7 +351,8 @@ pub struct AvlTreeSetUnionIter<'a, T: 'a + Ord, F: FnMut(&'a AvlNode<T>) -> &'a 
 }
 
 pub type AvlTreeSetDifferenceIter<'a, T, F, P> = Filter<Map<AvlTreeSetNodeIter<'a, T>, F>, P>;
-pub type AvlTreeSetSymmetricDifferenceIter<'a, T, F, P> = Filter<AvlTreeSetUnionIter<'a, T, F>, P>;
+pub type AvlTreeSetSymmetricDifferenceIter<'a, T, F, P> =
+    Chain<AvlTreeSetDifferenceIter<'a, T, F, P>, AvlTreeSetDifferenceIter<'a, T, F, P>>;
 
 impl<'a, T: 'a + Ord, F: FnMut(&'a AvlNode<T>) -> &'a T> Iterator
     for AvlTreeSetUnionIter<'a, T, F>
@@ -531,37 +531,41 @@ mod specs {
                     assert_eq!(even_set.len(), odd_length + even_length);
                 });
 
-                ctx.it(".union, .difference should work", |_| {
-                    let midpoint = (random::<u8>() + 2) as u16;
+                ctx.it(
+                    ".union, .difference and .symmetric_difference should work",
+                    |_| {
+                        let midpoint = (random::<u8>() + 2) as u16;
 
-                    let this_set = (0..midpoint).collect::<AvlTreeSet<u16>>();
-                    let other_set = ((midpoint - 2)..(2 * midpoint)).collect::<AvlTreeSet<u16>>();
+                        let this_set = (0..midpoint).collect::<AvlTreeSet<u16>>();
+                        let other_set =
+                            ((midpoint - 2)..(2 * midpoint)).collect::<AvlTreeSet<u16>>();
 
-                    assert_equal(
-                        this_set.union(&other_set),
-                        (0..(2 * midpoint)).collect::<BTreeSet<u16>>().iter(),
-                    );
+                        assert_equal(
+                            this_set.union(&other_set),
+                            (0..(2 * midpoint)).collect::<BTreeSet<u16>>().iter(),
+                        );
 
-                    assert_equal(
-                        this_set.difference(&other_set),
-                        this_set
-                            .iter()
-                            .cloned()
-                            .collect::<BTreeSet<_>>()
-                            .difference(&other_set.iter().cloned().collect::<BTreeSet<_>>()),
-                    );
+                        assert_equal(
+                            this_set.difference(&other_set),
+                            this_set
+                                .iter()
+                                .cloned()
+                                .collect::<BTreeSet<_>>()
+                                .difference(&other_set.iter().cloned().collect::<BTreeSet<_>>()),
+                        );
 
-                    assert_equal(
-                        this_set.symmetric_difference(&other_set),
-                        this_set
-                            .iter()
-                            .cloned()
-                            .collect::<BTreeSet<_>>()
-                            .symmetric_difference(
-                                &other_set.iter().cloned().collect::<BTreeSet<_>>(),
-                            ),
-                    );
-                });
+                        assert_equal(
+                            other_set.symmetric_difference(&this_set),
+                            other_set
+                                .iter()
+                                .cloned()
+                                .collect::<BTreeSet<_>>()
+                                .symmetric_difference(
+                                    &this_set.iter().cloned().collect::<BTreeSet<_>>(),
+                                ),
+                        );
+                    },
+                );
             },
         ));
     }
