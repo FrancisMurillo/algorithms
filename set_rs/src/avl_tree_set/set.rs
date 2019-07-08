@@ -15,8 +15,6 @@ impl<'a, T: 'a + Ord> Default for AvlTreeSet<T> {
     }
 }
 
-pub type AvlTreeSetValueIter<'a, T, F> = Map<AvlTreeSetNodeIter<'a, T>, F>;
-
 impl<'a, T: 'a + Ord> AvlTreeSet<T> {
     pub fn new() -> Self {
         Self { root: None }
@@ -259,6 +257,31 @@ impl<'a, T: 'a + Ord> AvlTreeSet<T> {
             right_iter: other.iter().peekable(),
         }
     }
+
+    pub fn difference(
+        &'a self,
+        other: &'a Self,
+    ) -> AvlTreeSetDifferenceIter<
+        'a,
+        T,
+        impl FnMut(&'a AvlNode<T>) -> &'a T,
+        impl FnMut(&&'a T) -> bool,
+    > {
+        self.iter().filter(move |&value| !other.contains(value))
+    }
+
+    pub fn symmetric_difference(
+        &'a self,
+        other: &'a Self,
+    ) -> AvlTreeSetSymmetricDifferenceIter<
+        'a,
+        T,
+        impl FnMut(&'a AvlNode<T>) -> &'a T,
+        impl FnMut(&&'a T) -> bool,
+    > {
+        self.union(other)
+            .filter(move |&value| !(other.contains(value) && self.contains(value)))
+    }
 }
 
 impl<T: Ord> FromIterator<T> for AvlTreeSet<T> {
@@ -320,11 +343,16 @@ impl<'a, T: 'a + Ord> Iterator for AvlTreeSetNodeIter<'a, T> {
     }
 }
 
+pub type AvlTreeSetValueIter<'a, T, F> = Map<AvlTreeSetNodeIter<'a, T>, F>;
+
 #[derive(Debug)]
 pub struct AvlTreeSetUnionIter<'a, T: 'a + Ord, F: FnMut(&'a AvlNode<T>) -> &'a T> {
     left_iter: Peekable<AvlTreeSetValueIter<'a, T, F>>,
     right_iter: Peekable<AvlTreeSetValueIter<'a, T, F>>,
 }
+
+pub type AvlTreeSetDifferenceIter<'a, T, F, P> = Filter<Map<AvlTreeSetNodeIter<'a, T>, F>, P>;
+pub type AvlTreeSetSymmetricDifferenceIter<'a, T, F, P> = Filter<AvlTreeSetUnionIter<'a, T, F>, P>;
 
 impl<'a, T: 'a + Ord, F: FnMut(&'a AvlNode<T>) -> &'a T> Iterator
     for AvlTreeSetUnionIter<'a, T, F>
@@ -503,7 +531,7 @@ mod specs {
                     assert_eq!(even_set.len(), odd_length + even_length);
                 });
 
-                ctx.it(".union should work", |_| {
+                ctx.it(".union, .difference should work", |_| {
                     let midpoint = (random::<u8>() + 2) as u16;
 
                     let this_set = (0..midpoint).collect::<AvlTreeSet<u16>>();
@@ -512,6 +540,26 @@ mod specs {
                     assert_equal(
                         this_set.union(&other_set),
                         (0..(2 * midpoint)).collect::<BTreeSet<u16>>().iter(),
+                    );
+
+                    assert_equal(
+                        this_set.difference(&other_set),
+                        this_set
+                            .iter()
+                            .cloned()
+                            .collect::<BTreeSet<_>>()
+                            .difference(&other_set.iter().cloned().collect::<BTreeSet<_>>()),
+                    );
+
+                    assert_equal(
+                        this_set.symmetric_difference(&other_set),
+                        this_set
+                            .iter()
+                            .cloned()
+                            .collect::<BTreeSet<_>>()
+                            .symmetric_difference(
+                                &other_set.iter().cloned().collect::<BTreeSet<_>>(),
+                            ),
                     );
                 });
             },
