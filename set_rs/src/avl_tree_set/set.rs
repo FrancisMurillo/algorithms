@@ -1,5 +1,5 @@
 use super::tree::{AvlNode, AvlTree};
-use core::iter::Map;
+use core::iter::{Filter, Map, Peekable};
 use std::cmp::Ordering;
 use std::iter::FromIterator;
 use std::mem::{replace, swap};
@@ -14,6 +14,8 @@ impl<'a, T: 'a + Ord> Default for AvlTreeSet<T> {
         Self { root: None }
     }
 }
+
+pub type AvlTreeSetValueIter<'a, T, F> = Map<AvlTreeSetNodeIter<'a, T>, F>;
 
 impl<'a, T: 'a + Ord> AvlTreeSet<T> {
     pub fn new() -> Self {
@@ -74,7 +76,7 @@ impl<'a, T: 'a + Ord> AvlTreeSet<T> {
             };
         }
 
-        if target_value.is_none() {
+        if target_value.as_ref().is_none() {
             return None;
         }
 
@@ -237,14 +239,24 @@ impl<'a, T: 'a + Ord> AvlTreeSet<T> {
     }
 
     #[deny(clippy::all)]
-    pub fn iter(&self) -> Map<AvlTreeSetNodeIter<'_, T>, fn(&'_ AvlNode<T>) -> &'_ T> {
-        self.node_iter().map(|node| &node.value)
+    pub fn iter(&'a self) -> AvlTreeSetValueIter<'a, T, impl FnMut(&'a AvlNode<T>) -> &'a T> {
+        self.node_iter().map(|node: &AvlNode<T>| &node.value)
     }
 
-    fn node_iter(&self) -> AvlTreeSetNodeIter<'_, T> {
+    fn node_iter(&'a self) -> AvlTreeSetNodeIter<'a, T> {
         AvlTreeSetNodeIter {
             prev_nodes: Vec::default(),
             current_tree: &self.root,
+        }
+    }
+
+    pub fn union(
+        &'a self,
+        other: &'a Self,
+    ) -> AvlTreeSetUnionIter<'a, T, impl FnMut(&'a AvlNode<T>) -> &'a T> {
+        AvlTreeSetUnionIter {
+            left_iter: self.iter().peekable(),
+            right_iter: other.iter().peekable(),
         }
     }
 }
@@ -262,7 +274,7 @@ impl<T: Ord> FromIterator<T> for AvlTreeSet<T> {
 }
 
 #[derive(Debug)]
-pub struct AvlTreeSetNodeIter<'a, T: 'a + Ord> {
+pub struct AvlTreeSetNodeIter<'a, T: Ord> {
     prev_nodes: Vec<&'a AvlNode<T>>,
     current_tree: &'a AvlTree<T>,
 }
@@ -308,6 +320,39 @@ impl<'a, T: 'a + Ord> Iterator for AvlTreeSetNodeIter<'a, T> {
     }
 }
 
+#[derive(Debug)]
+pub struct AvlTreeSetUnionIter<'a, T: 'a + Ord, F: FnMut(&'a AvlNode<T>) -> &'a T> {
+    left_iter: Peekable<AvlTreeSetValueIter<'a, T, F>>,
+    right_iter: Peekable<AvlTreeSetValueIter<'a, T, F>>,
+}
+
+impl<'a, T: 'a + Ord, F: FnMut(&'a AvlNode<T>) -> &'a T> Iterator
+    for AvlTreeSetUnionIter<'a, T, F>
+{
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(&left_node) = self.left_iter.peek() {
+            if let Some(&right_node) = self.right_iter.peek() {
+                match left_node.cmp(&right_node) {
+                    Ordering::Less => self.left_iter.next(),
+                    Ordering::Equal => {
+                        self.right_iter.next();
+                        self.left_iter.next()
+                    }
+                    Ordering::Greater => self.right_iter.next(),
+                }
+            } else {
+                self.left_iter.next()
+            }
+        } else if self.right_iter.peek().is_some() {
+            self.right_iter.next()
+        } else {
+            None
+        }
+    }
+}
+
 #[cfg(test)]
 mod specs {
     use super::*;
@@ -315,6 +360,7 @@ mod specs {
     use itertools::{assert_equal, Itertools};
     use rand::random;
     use std::cmp::max;
+    use std::collections::BTreeSet;
     use test::Bencher;
 
     #[derive(Clone, Default, Debug)]
@@ -456,18 +502,28 @@ mod specs {
                     assert!(odd_set.is_empty());
                     assert_eq!(even_set.len(), odd_length + even_length);
                 });
+
+                ctx.it(".union should work", |_| {
+                    let midpoint = (random::<u8>() + 2) as u16;
+
+                    let this_set = (0..midpoint).collect::<AvlTreeSet<u16>>();
+                    let other_set = ((midpoint - 2)..(2 * midpoint)).collect::<AvlTreeSet<u16>>();
+
+                    assert_equal(
+                        this_set.union(&other_set),
+                        (0..(2 * midpoint)).collect::<BTreeSet<u16>>().iter(),
+                    );
+                });
             },
         ));
     }
 
     #[test]
     fn sandbox() {
-        let mut this_set = AvlTreeSet::default();
-        let mut other_set = (1..16).collect::<AvlTreeSet<_>>();
+        let this_set = (1..4).collect::<AvlTreeSet<_>>();
+        let other_set = (3..7).collect::<AvlTreeSet<_>>();
 
-        this_set.append(&mut other_set);
-
-        dbg!(this_set);
+        dbg!(this_set.union(&other_set).collect::<Vec<_>>());
     }
 
     #[bench]
