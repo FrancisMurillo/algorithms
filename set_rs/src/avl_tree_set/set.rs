@@ -237,49 +237,33 @@ impl<'a, T: 'a + Ord> AvlTreeSet<T> {
     }
 
     #[deny(clippy::all)]
-    pub fn iter(&'a self) -> AvlTreeSetValueIter<'a, T, impl FnMut(&'a AvlNode<T>) -> &'a T> {
-        self.node_iter().map(|node: &AvlNode<T>| &node.value)
+    pub fn iter(&'a self) -> impl Iterator<Item = &'a T> + 'a {
+        self.node_iter().map(|node| &node.value)
     }
 
-    fn node_iter(&'a self) -> AvlTreeSetNodeIter<'a, T> {
+    fn node_iter(&'a self) -> impl Iterator<Item = &'a AvlNode<T>> + 'a {
         AvlTreeSetNodeIter {
             prev_nodes: Vec::default(),
             current_tree: &self.root,
         }
     }
 
-    pub fn union(
-        &'a self,
-        other: &'a Self,
-    ) -> AvlTreeSetUnionIter<'a, T, impl FnMut(&'a AvlNode<T>) -> &'a T> {
+    pub fn union(&'a self, other: &'a Self) -> impl Iterator<Item = &'a T> + 'a {
         AvlTreeSetUnionIter {
             left_iter: self.iter().peekable(),
             right_iter: other.iter().peekable(),
         }
     }
 
-    pub fn difference(
-        &'a self,
-        other: &'a Self,
-    ) -> AvlTreeSetDifferenceIter<
-        'a,
-        T,
-        impl FnMut(&'a AvlNode<T>) -> &'a T,
-        impl FnMut(&&'a T) -> bool,
-    > {
+    pub fn difference(&'a self, other: &'a Self) -> impl Iterator<Item = &'a T> + 'a {
         self.iter().filter(move |&value| !other.contains(value))
     }
 
-    pub fn symmetric_difference(
-        &'a self,
-        other: &'a Self,
-    ) -> AvlTreeSetSymmetricDifferenceIter<
-        'a,
-        T,
-        impl FnMut(&'a AvlNode<T>) -> &'a T,
-        impl FnMut(&&'a T) -> bool,
-    > {
-        self.difference(&other).chain(other.difference(&self))
+    pub fn symmetric_difference(&'a self, other: &'a Self) -> impl Iterator<Item = &'a T> + 'a {
+        AvlTreeSetUnionIter {
+            left_iter: self.difference(&other).peekable(),
+            right_iter: other.difference(&self).peekable(),
+        }
     }
 }
 
@@ -344,19 +328,16 @@ impl<'a, T: 'a + Ord> Iterator for AvlTreeSetNodeIter<'a, T> {
 
 pub type AvlTreeSetValueIter<'a, T, F> = Map<AvlTreeSetNodeIter<'a, T>, F>;
 
-#[derive(Debug)]
-pub struct AvlTreeSetUnionIter<'a, T: 'a + Ord, F: FnMut(&'a AvlNode<T>) -> &'a T> {
-    left_iter: Peekable<AvlTreeSetValueIter<'a, T, F>>,
-    right_iter: Peekable<AvlTreeSetValueIter<'a, T, F>>,
+pub struct AvlTreeSetUnionIter<'a, T: 'a + Ord, I: Iterator<Item = &'a T>> {
+    left_iter: Peekable<I>,
+    right_iter: Peekable<I>,
 }
 
 pub type AvlTreeSetDifferenceIter<'a, T, F, P> = Filter<Map<AvlTreeSetNodeIter<'a, T>, F>, P>;
 pub type AvlTreeSetSymmetricDifferenceIter<'a, T, F, P> =
     Chain<AvlTreeSetDifferenceIter<'a, T, F, P>, AvlTreeSetDifferenceIter<'a, T, F, P>>;
 
-impl<'a, T: 'a + Ord, F: FnMut(&'a AvlNode<T>) -> &'a T> Iterator
-    for AvlTreeSetUnionIter<'a, T, F>
-{
+impl<'a, T: 'a + Ord, I: Iterator<Item = &'a T>> Iterator for AvlTreeSetUnionIter<'a, T, I> {
     type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
